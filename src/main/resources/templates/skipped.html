@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments :: head('Skipped')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav}"></nav>
+<div th:replace="~{fragments :: flash}"></div>
+
+<h2>Skipped jobs</h2>
+<p class="muted">All cached jobs with status Skipped, across every search. Leave the experience range empty to skip that filter.</p>
+
+<form th:replace="~{fragments :: filterForm(@{/skipped})}"></form>
+<section th:replace="~{fragments :: listing}"></section>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+
+<head th:fragment="head(title)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title} + ' · JFetch'">JFetch</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 1200px; padding: 0 1rem 2rem; color: #222; }
+        nav { display: flex; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid #ddd; margin-bottom: 1rem; align-items: center; }
+        nav a { text-decoration: none; color: #2457a6; }
+        nav a.active { font-weight: 700; color: #111; }
+        nav .brand { font-weight: 800; color: #111; margin-right: 1rem; }
+        .error { background: #fde8e8; border: 1px solid #f5b5b5; padding: .6rem .8rem; border-radius: 4px; }
+        .info { background: #eef5ff; border: 1px solid #bcd3f5; padding: .6rem .8rem; border-radius: 4px; }
+        .muted { color: #777; font-size: .85em; }
+        form.filters, form.search { display: flex; flex-wrap: wrap; gap: .8rem; align-items: end; margin: 1rem 0; }
+        form.filters label, form.search label { display: flex; flex-direction: column; font-size: .85em; gap: .2rem; }
+        input[type=number] { width: 5em; }
+        table { width: 100%; border-collapse: collapse; margin-top: .5rem; }
+        th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #eee; vertical-align: top; }
+        th { background: #f6f6f6; font-size: .85em; }
+        .status-APPLIED { background: #effaf0; }
+        .status-SKIPPED, .status-CRITERIA_FAILED { background: #f7f7f7; color: #888; }
+        .pagination { display: flex; gap: .4rem; margin-top: 1rem; flex-wrap: wrap; }
+        .pagination a, .pagination span { padding: .2rem .6rem; border: 1px solid #ddd; border-radius: 3px; text-decoration: none; }
+        .pagination .current { background: #2457a6; color: #fff; border-color: #2457a6; }
+        .toolbar { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
+        button { cursor: pointer; }
+    </style>
+</head>
+
+<body>
+
+<nav th:fragment="nav">
+    <span class="brand">JFetch</span>
+    <a th:href="@{/}" th:classappend="${active == 'search'} ? 'active'">Search</a>
+    <a th:href="@{/pending}" th:classappend="${active == 'pending'} ? 'active'">Pending</a>
+    <a th:href="@{/applied}" th:classappend="${active == 'applied'} ? 'active'">Applied</a>
+    <a th:href="@{/skipped}" th:classappend="${active == 'skipped'} ? 'active'">Skipped</a>
+    <a th:href="@{/failed}" th:classappend="${active == 'failed'} ? 'active'">Criteria failed</a>
+    <a th:href="@{/h2-console}" class="muted" style="margin-left:auto">H2 console</a>
+</nav>
+
+<div th:fragment="flash">
+    <p class="error" th:if="${error}" th:text="${error}"></p>
+    <p class="info" th:if="${message}" th:text="${message}"></p>
+</div>
+
+<!-- Skips every PENDING job (not just the ones on this page) and expires all cached searches. -->
+<form th:fragment="skipAll" method="post" th:action="@{/jobs/skip-all}" th:if="${pendingCount > 0}"
+      th:attr="data-count=${pendingCount}"
+      onsubmit="return confirm('Mark all ' + this.dataset.count + ' pending job(s) as Skipped, including ones hidden by filters? '
+          + 'All cached searches will also expire, so re-running a search calls JSearch again.');">
+    <input type="hidden" name="returnTo" th:value="${returnTo}">
+    <button type="submit">Skip all pending (<span th:text="${pendingCount}">0</span>)</button>
+</form>
+
+<!-- View filter over stored jobs on the status pages: never calls JSearch, never changes statuses. -->
+<form th:fragment="filterForm(action)" class="filters" method="get" th:action="${action}">
+    <input type="hidden" name="run" th:if="${run != null}" th:value="${run.id}">
+    <label>Min exp (yrs)
+        <input type="number" name="minExp" min="0" max="50" step="0.5" th:value="${filter.minYears}">
+    </label>
+    <label>Max exp (yrs)
+        <input type="number" name="maxExp" min="0" max="50" step="0.5" th:value="${filter.maxYears}">
+    </label>
+    <label>Keyword
+        <input type="text" name="keyword" th:value="${filter.keyword}">
+    </label>
+    <label style="flex-direction:row;align-items:center">
+        <input type="checkbox" name="includeUnknown" value="true" th:checked="${filter.includeUnknown}">
+        include unknown experience
+    </label>
+    <button type="submit">Apply filter</button>
+</form>
+
+<section th:fragment="listing">
+    <form th:replace="~{fragments :: skipAll}"></form>
+    <p th:if="${total == 0}" class="info">No jobs match these filters.</p>
+
+    <th:block th:if="${total > 0}">
+        <div class="toolbar">
+            <button type="button" id="open-all">Open all links on this page</button>
+            <span class="muted">
+                <span th:text="${total}">0</span> matching job(s) · page
+                <span th:text="${page}">1</span>/<span th:text="${totalPages}">1</span>.
+                Allow pop-ups for this site, or the browser will only open the first tab.
+            </span>
+        </div>
+
+        <table>
+            <thead>
+            <tr>
+                <th>Job</th>
+                <th>Company</th>
+                <th>Experience</th>
+                <th>Dates</th>
+                <th>Status</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="job : ${jobs}" th:class="'status-' + ${job.status}">
+                <td>
+                    <a th:if="${job.applyUrl}" th:href="${job.applyUrl}" th:text="${job.title}"
+                       target="_blank" rel="noopener noreferrer" data-open-all>title</a>
+                    <span th:unless="${job.applyUrl}" th:text="${job.title}">title</span>
+                    <span th:unless="${job.applyUrl}" class="muted">(no listing link)</span>
+                    <div class="muted">
+                        <span th:text="${job.location}"></span>
+                        <span th:if="${job.publisher}" th:text="'· via ' + ${job.publisher}"></span>
+                    </div>
+                </td>
+                <td>
+                    <th:block th:if="${job.employerName}">
+                        <div th:text="${job.employerName}">company</div>
+                        <a th:href="${job.ambitionBoxUrl}" target="_blank" rel="noopener noreferrer" data-open-all
+                           th:text="${job.ambitionBoxIsSearch} ? 'AmbitionBox (search)' : 'AmbitionBox'">AmbitionBox</a>
+                        <a th:if="${job.ambitionBoxSearchUrl}" th:href="${job.ambitionBoxSearchUrl}" class="muted"
+                           target="_blank" rel="noopener noreferrer" title="Use if the overview link 404s">search</a>
+                    </th:block>
+                    <span th:unless="${job.employerName}" class="muted">unknown company</span>
+                </td>
+                <td th:text="${job.experienceLabel}" th:title="${job.experienceEvidence}">exp</td>
+                <td class="muted">
+                    <div th:if="${job.postedOn}" th:text="'Posted ' + ${job.postedOn}"></div>
+                    <div th:text="'Fetched ' + ${job.fetchedOn}"></div>
+                </td>
+                <td>
+                    <form method="post" th:action="@{/jobs/status}">
+                        <input type="hidden" name="jobId" th:value="${job.jobId}">
+                        <input type="hidden" name="returnTo" th:value="${returnTo}">
+                        <select name="status" onchange="this.form.submit()">
+                            <option th:each="s : ${statuses}" th:value="${s}" th:text="${s.label()}"
+                                    th:selected="${s == job.status}"></option>
+                        </select>
+                        <noscript><button type="submit">Save</button></noscript>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+
+        <div class="pagination" th:if="${totalPages > 1}">
+            <a th:if="${prevUrl}" th:href="${prevUrl}">&laquo; Prev</a>
+            <th:block th:each="p : ${pageLinks}">
+                <span th:if="${p.current}" class="current" th:text="${p.number}"></span>
+                <a th:unless="${p.current}" th:href="${p.url}" th:text="${p.number}"></a>
+            </th:block>
+            <a th:if="${nextUrl}" th:href="${nextUrl}">Next &raquo;</a>
+        </div>
+
+        <script>
+            // window.open must run synchronously inside the click handler, or browsers treat it as
+            // an unsolicited pop-up. Even so, most browsers allow only one tab per click unless
+            // pop-ups are allowed for this site.
+            document.getElementById('open-all').addEventListener('click', function () {
+                var links = document.querySelectorAll('a[data-open-all]');
+                var blocked = 0;
+                for (var i = 0; i < links.length; i++) {
+                    var w = window.open(links[i].href, '_blank');
+                    if (w) { w.opener = null; } else { blocked++; }
+                }
+                if (blocked > 0) {
+                    alert(blocked + ' of ' + links.length + ' tabs were blocked. Allow pop-ups for this site and click again.');
+                }
+            });
+        </script>
+    </th:block>
+</section>
+
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments :: head('Results')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav}"></nav>
+<div th:replace="~{fragments :: flash}"></div>
+
+<h2>Results: <span th:text="${run.query}">query</span></h2>
+<th:block th:if="${summary != null}">
+    <p class="info" th:if="${summary.fromCache}">Served from local cache. JSearch was not called.</p>
+    <p class="info" th:unless="${summary.fromCache}"
+       th:text="|Fetched ${summary.pagesUsed} page(s) from JSearch (${summary.apiCalls} billed request(s)): ${summary.newJobs} new job(s), ${summary.passed} passed the criteria, ${summary.failed} stored as Criteria failed, ${summary.duplicates} already in the DB and ignored.|"></p>
+</th:block>
+<p class="error" th:if="${run.expired}">
+    This cached search has expired. Re-run it from the Search page to fetch fresh results.
+</p>
+<p class="muted">
+    Country: <span th:text="${run.country} ?: 'any'"></span> ·
+    date posted: <span th:text="${run.datePosted}"></span> ·
+    criteria: <b th:text="${run.criteria().label()}"></b> ·
+    <span th:text="${run.resultCount}"></span> new jobs stored by this search (<span th:text="${total}"></span> passed), fetched on
+    <span th:text="${#temporals.format(run.fetchedAt.atZone(T(java.time.ZoneId).systemDefault()), 'dd MMM yyyy, HH:mm')}"></span>.
+    Older listings may no longer be live.
+</p>
+
+<section th:replace="~{fragments :: listing}"></section>
+</body>
+</html>

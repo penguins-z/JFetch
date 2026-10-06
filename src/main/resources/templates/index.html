@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments :: head('Search')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav}"></nav>
+<div th:replace="~{fragments :: flash}"></div>
+
+<p class="error" th:unless="${hasApiKey}">
+    RAPIDAPI_KEY isn't set, so new searches will fail. Add it to the .env file next to pom.xml and restart.
+    Cached searches below still work.
+</p>
+
+<h2>New search</h2>
+<form class="search" method="post" th:action="@{/search}">
+    <label>JSearch query
+        <input type="text" name="query" th:value="${form.query}" size="30" required>
+    </label>
+    <label>Country (ISO code)
+        <input type="text" name="country" th:value="${form.country}" size="4" maxlength="2">
+    </label>
+    <label>Date posted
+        <select name="datePosted">
+            <option value="all" th:selected="${form.datePosted == 'all'}">Any time</option>
+            <option value="month" th:selected="${form.datePosted == 'month'}">Past month</option>
+            <option value="week" th:selected="${form.datePosted == 'week'}">Past week</option>
+            <option value="3days" th:selected="${form.datePosted == '3days'}">Past 3 days</option>
+            <option value="today" th:selected="${form.datePosted == 'today'}">Today</option>
+        </select>
+    </label>
+    <label>New jobs wanted (×10)
+        <input type="number" name="numPages" th:value="${form.numPages}" min="1" th:max="${maxPages}">
+    </label>
+    <label>Min exp (yrs)
+        <input type="number" name="minExp" th:value="${form.minExp}" min="0" max="50" step="0.5">
+    </label>
+    <label>Max exp (yrs)
+        <input type="number" name="maxExp" th:value="${form.maxExp}" min="0" max="50" step="0.5">
+    </label>
+    <label>Keyword
+        <input type="text" name="keyword" th:value="${form.keyword}" size="10">
+    </label>
+    <label style="flex-direction:row;align-items:center">
+        <input type="checkbox" name="includeUnknown" value="true" th:checked="${form.includeUnknown}"> include unknown experience
+    </label>
+    <button type="submit">Search</button>
+</form>
+<p class="muted">
+    Jobs already in the database (any status) are ignored. The search requests one page (about 10 jobs, one billed
+    request) at a time until it has that many × 10 new jobs, JSearch runs out of results, or it reaches
+    <span th:text="${maxScanPages}"></span> pages (the per-search cost cap).
+    New jobs that match the keyword and experience range are stored as Pending; the rest as Criteria failed.
+    Repeating the exact same search is served from the cache until you use "Skip all pending", which expires it.
+</p>
+
+<h2>Previous searches (cached)</h2>
+<p th:if="${#lists.isEmpty(runs)}" class="muted">None yet.</p>
+<table th:unless="${#lists.isEmpty(runs)}">
+    <thead><tr><th>Query</th><th>Country</th><th>Date posted</th><th>Pages</th><th>Criteria</th><th>Fetched on</th><th>New jobs</th><th></th></tr></thead>
+    <tbody>
+    <tr th:each="r : ${runs}">
+        <td><a th:href="@{/results(run=${r.id})}" th:text="${r.query}">q</a></td>
+        <td th:text="${r.country}"></td>
+        <td th:text="${r.datePosted}"></td>
+        <td th:text="${r.numPages}"></td>
+        <td th:text="${r.criteria().label()}"></td>
+        <td th:text="${#temporals.format(r.fetchedAt.atZone(T(java.time.ZoneId).systemDefault()), 'dd MMM yyyy, HH:mm')}"></td>
+        <td th:text="${r.resultCount}"></td>
+        <td>
+            <form th:if="${r.expired}" method="post" th:action="@{/search}">
+                <input type="hidden" name="query" th:value="${r.query}">
+                <input type="hidden" name="country" th:value="${r.country}">
+                <input type="hidden" name="datePosted" th:value="${r.datePosted}">
+                <input type="hidden" name="numPages" th:value="${r.numPages}">
+                <input type="hidden" name="minExp" th:value="${r.minExp}">
+                <input type="hidden" name="maxExp" th:value="${r.maxExp}">
+                <input type="hidden" name="keyword" th:value="${r.keyword}">
+                <input type="hidden" name="includeUnknown" th:value="${r.includeUnknown}">
+                <span class="muted">expired</span> <button type="submit">Re-fetch</button>
+            </form>
+        </td>
+    </tr>
+    </tbody>
+</table>
+</body>
+</html>
